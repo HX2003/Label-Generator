@@ -1,0 +1,68 @@
+<style>
+  #main {
+    font: 15px/20px arial, sans-serif;
+    background-color: #000;
+    width: 400px;
+    height: 128px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
+  }
+
+  #image-cont {
+    width: 128px;
+    height: 128px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    color: #fff;
+	font-size: 18px;
+  }
+
+  #pcb-type {
+    font-size: 45px;
+    font-weight: bold;
+  }
+  
+  #secondary-cont {
+	display: flex;
+	flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  
+  #box-cont {
+    display: flex;
+    flex-direction: column;
+    width: 270px;
+    padding: 5px;
+    gap: 4px;
+  }
+
+  #box-cont>div {
+    display: flex;
+    background-color: #fff;
+    height: 100%;
+    text-align: center;
+    justify-content: center;
+    align-items: center;
+    font-size: 23px;
+  }
+</style>
+<div id="main">
+  <div id="image-cont">
+    <div id="pcb-type" editable-text-field>PCB</div>
+	<div id="secondary-cont">
+      <div id="pcb-colour" editable-text-field>Green</div>
+      <div id="pcb-surface-finish" editable-text-field>HASL (Lead)</div>
+	</div>
+  </div>
+  <div id="box-cont">
+    <div id="pcb-name" editable-text-field>Name</div>
+    <div id="pcb-data" editable-text-field>01/01/2022</div>
+    <div id="pcb-rev" editable-text-field>Rev.0</div>
+  </div>
+</div>
