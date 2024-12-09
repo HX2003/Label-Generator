@@ -4,31 +4,182 @@
     <script type="text/javascript" src="html-to-image.min.js"></script>
     <script>
       document.addEventListener('DOMContentLoaded', function(event) {
+        const builtInLabelPath = 'labels/';
+        const builtInLabelNames = ['Component Label Long 12mm', 'Component Label Short 12mm', 'Button head hex screw', 'PCB', 'Socket head hex screw']
+
         window.addEventListener('resize', scale_contents);
-        let preview_content = document.getElementById('preview-content');
-        let preview_content_doc = preview_content.contentDocument;
-        let preview_content_body = preview_content_doc.body;
-        let config = document.getElementById('config');
-        let file_picker = document.getElementById('file-picker');
-        let input = file_picker.querySelector('input[type="file"]');
-        let label_picker = document.getElementById('label-picker');
-        let label_editor = document.getElementById('label-editor');
-        let label_generate_wrapper = document.getElementById('label-generate-wrapper');
+        const preview_content = document.getElementById('preview-content');
+        const preview_content_doc = preview_content.contentDocument;
+        const preview_content_body = preview_content_doc.body;
+        const config = document.getElementById('config');
+        const file_picker = document.getElementById('file-picker');
+        const input = file_picker.querySelector('input[type="file"]');
+        const label_picker = document.getElementById('label-picker');
+        const label_editor = document.getElementById('label-editor');
+        const label_generate_config_filename = document.getElementById('label-generate-config-filename');
+        const label_generate_config_hires = document.getElementById('label-generate-config-hires');
+        const label_generate_button = document.getElementById('label-generate-button');
         let cur_filename = '';
         let files = false;
 
+        function createPickerButton(name) {
+          let div = document.createElement('div');
+          let span = document.createElement('span');
+          let file_name = document.createTextNode(name);
+          div.appendChild(span);
+          span.appendChild(file_name);
+          div.classList.add('picker-item-label');
+          div.setAttribute('name', name); // We set this attribute to the name
+          div.setAttribute('built-in', ''); // We create this attribute with empty value
+          div.addEventListener('click', picker_item_label_click);
+          label_picker.appendChild(div);
+
+          return div;
+        }
+
+        function addBuiltInLabelsToPicker() {
+          let first_item = true;
+          for(const name of builtInLabelNames) {
+            const pickerButton = createPickerButton(name);
+            if(first_item) {
+              first_item = false;
+              // Select the first item
+              pickerButton.click()
+            }
+          }
+        }
+        
+        addBuiltInLabelsToPicker();
+        
+        function generatePreviewAndEditor(name, html) {
+          /* Clear previous data */
+          while (preview_content_body.firstChild) {
+            preview_content_body.removeChild(preview_content_body.firstChild);
+          }
+          while (label_editor.firstChild) {
+            label_editor.removeChild(label_editor.firstChild);
+          }
+          /* Insert new data */
+          label_generate_config_filename.value = name;
+          let css = document.createElement('style')
+          css.type = 'text/css';
+          css.appendChild(document.createTextNode('.editing {outline: 2px solid yellow;}'));
+          preview_content_body.appendChild(css);
+          preview_content_body.insertAdjacentHTML('beforeend', html);
+          preview_content_body.style.margin = '0px';
+          preview_content_body.style.transformOrigin = 'top left';
+          preview_content_body.style.overflow = 'hidden';
+          scale_contents();
+          const editables = preview_content_doc.querySelectorAll('[editable-text-field]');
+          for(const editable of editables) {
+            let div = document.createElement('div');
+            div.classList.add('label-editor-item');
+            let id_info = document.createElement('div');
+            let id_info_text = document.createTextNode('Error: No ID');
+            let input = document.createElement('input');
+            let reset_button = document.createElement('span');
+            let reset_button_text = document.createTextNode('\u21BA');
+            input.addEventListener('input', sync_text);
+            input.addEventListener('focusin', input_focus_in);
+            input.addEventListener('focusout', input_focus_out);
+            reset_button.addEventListener('click', reset_text);
+            if (editable.textContent) {
+              input.defaultValue = editable.textContent;
+            }
+            if (editable.id) {
+              id_info_text.textContent = editable.id;
+              input.id = `input-${editable.id}`;
+              editable.addEventListener('click', editables_click);
+            } else {
+              input.disabled = true;
+            }
+            id_info.appendChild(id_info_text);
+            div.appendChild(id_info);
+            div.appendChild(input);
+            reset_button.appendChild(reset_button_text);
+            div.appendChild(reset_button);
+            label_editor.appendChild(div);
+          }
+        }
+
+        // Given the name/file name of label, loads a built-in (located on the server) label
+        async function loadBuiltInLabel(name) {
+          const response = await fetch(builtInLabelPath + name + '.html');
+            if (response.ok) {
+              const htmlContent = await response.text();
+              generatePreviewAndEditor(name, htmlContent);
+            }
+        }
+
         function scale_contents() {
           preview_content_body.style.transform = 'scale(1, 1)';
-          let boundingRect1;
-          let boundingRect2;
           if (preview_content_body.firstElementChild) {
-            boundingRect1 = preview_content_doc.getElementById('main').getBoundingClientRect();
-            boundingRect2 = preview_content.getBoundingClientRect();
-            let scaleAmt = boundingRect2.width / boundingRect1.width;
+            const boundingRect1 = preview_content_doc.getElementById('main').getBoundingClientRect();
+            const boundingRect2 = preview_content.getBoundingClientRect();
+            const scaleAmt = boundingRect2.width / boundingRect1.width;
             preview_content_body.style.transform = `scale(${scaleAmt}, ${scaleAmt})`;
             preview_content.style.height = boundingRect1.height * scaleAmt;
           }
         }
+        
+        label_generate_button.addEventListener('click', function(e) {
+          const prev_transform = preview_content_body.style.transform;
+          preview_content_body.style.transform = 'scale(1, 1)';
+          const dimensions = preview_content_doc.getElementById('main').getBoundingClientRect();
+          const hires = label_generate_config_hires.checked ? 4: 1;
+          htmlToImage.toJpeg(preview_content_body, {
+            width: dimensions.width,
+            height: dimensions.height,
+			      canvasWidth: dimensions.width*hires,
+			      canvasHeight: dimensions.height*hires,
+            pixelRatio: 1
+          }).then(function(dataUrl) {
+            preview_content_body.style.transform = prev_transform;
+            var link = document.createElement('a');
+            link.download = label_generate_config_filename.value + '.jpg';
+            //link.download = `${cur_filename.substring(0, cur_filename.lastIndexOf('.')) || cur_filename}.jpg`;
+            link.href = dataUrl;
+            link.click();
+            link.remove();
+          });
+        });
+
+        function picker_item_label_click(e) {
+          const picker_item_label_selected = document.querySelector('.picker-item-label-selected');
+          if(picker_item_label_selected) {
+            picker_item_label_selected.classList.remove('picker-item-label-selected');
+          }
+          e.target.classList.add('picker-item-label-selected');
+          loadBuiltInLabel(e.target.getAttribute('name'))
+          //loadUserLabel(e.target.getAttribute('file-id'));
+        }
+
+        function sync_text(e) {
+          const id = e.target.id.substring(6, e.target.id.length)
+          preview_content_doc.getElementById(id).textContent = e.target.value;
+        }
+
+        function reset_text(e) {
+          const input = e.target.previousSibling;
+          input.value = input.defaultValue;
+          const id = input.id.substring(6, input.id.length)
+          preview_content_doc.getElementById(id).textContent = input.defaultValue;
+        }
+
+        function input_focus_in(e) {
+          const id = e.target.previousSibling.textContent;
+          preview_content_doc.getElementById(id).classList.add('editing');
+        }
+
+        function input_focus_out(e) {
+          preview_content_doc.getElementsByClassName('editing')[0].classList.remove('editing');
+        }
+
+        function editables_click(e) {
+          document.getElementById(`input-${e.target.id}`).focus();
+        }
+
+        /* NOT CURRENTLY USED, USER ADDED FILE FUNCTION NOT YET IMPLEMENTED */
         droppedFiles = ['drag', 'dragstart', 'dragend', 'dragover', 'dragenter', 'dragleave', 'drop'].forEach(function(event) {
           file_picker.addEventListener(event, function(e) {
             e.preventDefault();
@@ -53,24 +204,6 @@
           files = e.target.files;
           listFiles();
         });
-        label_generate_wrapper.addEventListener('click', function(e) {
-          var prev_transform = preview_content_body.style.transform;
-          preview_content_body.style.transform = 'scale(1, 1)';
-          var dimensions = preview_content_doc.getElementById('main').getBoundingClientRect();
-          console.log(dimensions.height);
-          htmlToImage.toJpeg(preview_content_body, {
-            width: dimensions.width,
-            height: dimensions.height,
-            pixelRatio: 1
-          }).then(function(dataUrl) {
-            preview_content_body.style.transform = prev_transform;
-            var link = document.createElement('a');
-            link.download = `${cur_filename.substring(0, cur_filename.lastIndexOf('.')) || cur_filename}.jpeg`;
-            link.href = dataUrl;
-            link.click();
-            link.remove();
-          });
-        });
 
         function listFiles() {
           if (files) {
@@ -82,113 +215,44 @@
               var file_name = document.createTextNode(files[i].name);
               div.appendChild(span);
               span.appendChild(file_name);
-              div.classList.add('file-label');
+              div.classList.add('picker-item-label');
               div.setAttribute('file-id', i);
-              div.addEventListener('click', file_label_click);
+              div.addEventListener('click', picker_item_label_click);
               label_picker.appendChild(div);
             };
             preview_content_body.style.width = 'fit-content';
             preview_content_body.style.height = 'fit-content';
-            preview_content_body.style.margin = '0';
             preview_content_doc.documentElement.style.display = 'flex';
             preview_content_doc.documentElement.style.justifyContent = 'center';
             preview_content_doc.documentElement.style.alignItems = 'center';
             preview_content_doc.documentElement.style.overflow = 'hidden';
             preview_content_doc.documentElement.style.height = '100%';
-            label_picker.firstElementChild.classList.add('file-label-selected');
-            readFile(0);
+            label_picker.firstElementChild.classList.add('picker-item-label-selected');
+            loadUserLabel(0);
           }
         }
 
-        function readFile(id) {
+        function loadUserLabel(id) {
           if (files) {
-            let reader = new FileReader();
-            reader.addEventListener('load', () => {
-              /* Clear previous data */
-              while (preview_content_body.firstChild) {
-                preview_content_body.removeChild(preview_content_body.firstChild);
-              }
-              while (label_editor.firstChild) {
-                label_editor.removeChild(label_editor.firstChild);
-              }
-              /* Insert new data */
-              var css = document.createElement('style')
-              css.type = 'text/css';
-              css.appendChild(document.createTextNode('.editing {outline: 2px solid yellow;}'));
-              preview_content_body.appendChild(css);
-              preview_content_body.insertAdjacentHTML('beforeend', reader.result);
-              scale_contents();
-              var editables = preview_content_doc.querySelectorAll('[editable-text-field]');
-              for (var i = 0; i < editables.length; i++) {
-                var div = document.createElement('div');
-                div.classList.add('label-editor-item');
-                var id_info = document.createElement('div');
-                var id_info_text = document.createTextNode('Error: No ID');
-                var input = document.createElement('input');
-                var reset_button = document.createElement('span');
-                var reset_button_text = document.createTextNode('\u21BA');
-                input.addEventListener('input', sync_text);
-                input.addEventListener('focusin', input_focus_in);
-                input.addEventListener('focusout', input_focus_out);
-                reset_button.addEventListener('click', reset_text);
-                if (editables[i].textContent) {
-                  input.defaultValue = editables[i].textContent;
-                }
-                if (editables[i].id) {
-                  id_info_text.textContent = editables[i].id;
-                  input.id = `input-${editables[i].id}`;
-                  editables[i].addEventListener('click', editables_click);
-                } else {
-                  input.disabled = true;
-                }
-                id_info.appendChild(id_info_text);
-                div.appendChild(id_info);
-                div.appendChild(input);
-                reset_button.appendChild(reset_button_text);
-                div.appendChild(reset_button);
-                label_editor.appendChild(div);
-              }
-            }, false);
             if (files[id]) {
+              let reader = new FileReader();
+              reader.addEventListener('load', () => {
+                generatePreviewAndEditor(files[id].name, reader.result);
+              }, false);
               reader.readAsText(files[id]);
               cur_filename = files[id].name;
             }
           }
         }
 
-        function file_label_click(e) {
-          document.getElementsByClassName('file-label-selected')[0].classList.remove('file-label-selected');
-          e.target.classList.add('file-label-selected');
-          readFile(e.target.getAttribute('file-id'));
-        }
-
-        function sync_text(e) {
-          var id = e.target.id.substring(6, e.target.id.length)
-          preview_content_doc.getElementById(id).textContent = e.target.value;
-        }
-
-        function reset_text(e) {
-          var input = e.target.previousSibling;
-          input.value = input.defaultValue;
-          var id = input.id.substring(6, input.id.length)
-          preview_content_doc.getElementById(id).textContent = input.defaultValue;
-        }
-
-        function input_focus_in(e) {
-          var id = e.target.previousSibling.textContent;
-          preview_content_doc.getElementById(id).classList.add('editing');
-        }
-
-        function input_focus_out(e) {
-          preview_content_doc.getElementsByClassName('editing')[0].classList.remove('editing');
-        }
-
-        function editables_click(e) {
-          document.getElementById(`input-${e.target.id}`).focus();
-        }
       });
     </script>
     <style>
+      :root {
+        --primary-color: #1a73e8;
+        --primary-color-hovered: #1567d3;
+      }
+
       ::-webkit-scrollbar {
         width: 19px;
       }
@@ -208,11 +272,15 @@
         background-color: #97989c;
       }
 
+      input[type="checkbox"] {
+        accent-color: var(--primary-color);
+      }
+
       body {
         display: flex;
         flex-direction: column;
         height: 100%;
-        margin: 0;
+        margin: 0px;
         font: 16px arial, sans-serif;
       }
 
@@ -238,24 +306,23 @@
       }
 
       #main-cont>div {
-        display: flex;
-        flex-direction: row;
         border: 1px solid #ccc;
         width: 100%;
-        height: 100%;
         justify-content: center;
         align-items: center;
         position: relative;
       }
 
-      #main-cont>div>.title {
+      #preview {
+        display: flex;
+        flex-direction: row;
+        background-color: #eee;
+      }
+
+      #preview-info {
         position: absolute;
         left: 10px;
         top: 10px;
-      }
-
-      #preview {
-        background-color: #eee;
       }
 
       #preview-content {
@@ -265,7 +332,7 @@
       }
 
       #file-picker {
-        display: flex;
+        display: none;
         flex-direction: row;
         align-items: center;
         justify-content: center;
@@ -307,19 +374,17 @@
       #file-picker-input+label:hover,
       #file-picker-input:focus+label,
       #file-picker-input.has-focus+label {
-        color: #1a73e8;
+        color: var(--primary-color-hovered);
       }
 
-      #config {
-        display: none;
-        width: 100%;
-        height: 100%;
+      #settings {
+        display: flex;
         flex-direction: column;
-        align-items: center;
-        margin: 5px;
+        padding: 5px;
+        width: 100%;
       }
 
-      #config>div {
+      #settings>div {
         width: 100%;
       }
 
@@ -337,7 +402,7 @@
         height: 100%;
       }
 
-      .file-label {
+      .picker-item-label {
         border: 1px solid #ccc;
         border-radius: 5px;
         display: flex;
@@ -348,7 +413,7 @@
         cursor: pointer;
       }
 
-      .file-label span {
+      .picker-item-label span {
         text-overflow: ellipsis;
         padding: 5px;
         display: flex;
@@ -365,8 +430,8 @@
         width: 100%;
       }
 
-      .file-label-selected {
-        border-color: #1a73e8;
+      .picker-item-label-selected {
+        border-color: var(--primary-color);
       }
 
       #label-editor {
@@ -394,12 +459,39 @@
 
       #label-generate-wrapper {
         display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      #label-generate-config {
+        width: 100%;
+        display: flex;
+        column-gap: 10px;
+        font-size: 13px;
+      }
+
+      #label-generate-config label {
+        display: flex;
+        align-items: center;
+        column-gap: 5px;
+      }
+
+      #label-generate-config label:first-of-type {
+        flex-grow: 1;
+      }
+
+      #label-generate-config label:first-of-type input {
+        flex-grow: 1;
+      }
+
+      #label-generate-button {
+        display: flex;
         flex-direction: row;
         align-items: center;
         justify-content: center;
-        width: 80%;
+        width: 90%;
         height: 40px;
-        background-color: #1a73e8;
+        background-color: var(--primary-color);
         margin: 10px;
         border-radius: 10px;
         color: #fff;
@@ -407,8 +499,8 @@
         user-select: none;
       }
 
-      #label-generate-wrapper:hover {
-        background-color: #1567d3
+      #label-generate-button:hover {
+        background-color: var(--primary-color-hovered);
       }
     </style>
   </head>
@@ -418,8 +510,9 @@
     </div>
     <div id="main-cont">
       <div id="preview">
-        <div class="title">
+        <div id="preview-info">
           <b>Preview</b>
+          <div id="preview-info-resolution"></div>
         </div>
         <iframe id="preview-content"></iframe>
       </div>
@@ -429,18 +522,25 @@
           <label for="file-picker-input">
             <b>Select files</b>
           </label>
-          <span>⠀or drag it here</span>
+          <span>&nbsp; or drag it here</span>
         </div>
-        <div id="config">
-          <div id="label-picker-wrapper">
-            <div id="label-picker"></div>
+        <div id="label-picker-wrapper">
+          <div id="label-picker"></div>
+        </div>
+        <hr>
+        <div id="label-editor"></div>
+        <hr>
+        <div id="label-generate-wrapper">
+          <div id="label-generate-config">
+            <label>File Name
+            <input type="text" id="label-generate-config-filename" placeholder="Enter file name">
+            </label>
+            <label>
+              Hi-Res Export
+              <input type="checkbox" id="label-generate-config-hires" checked=true>
+            </label>
           </div>
-          <hr>
-          <div id="label-editor"></div>
-          <div id="label-generate-wrapper">
-            <div id="label-generate"> Generate <div id="label-generate"></div>
-            </div>
-          </div>
+          <div id="label-generate-button">Generate</div>
         </div>
   </body>
 </html>

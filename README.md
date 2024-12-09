@@ -1,5 +1,4 @@
 # Label-Generator
-A web app to generate labels from html files. Manage different labels and create jpeg images for printing.
+A web app to generate labels for inventory. The templated labels are designed using html files. Manage different labels and create jpg images for printing.
 
-To use, you'll must download the files located in labels.
 ![Alt text](doc/labelgenerator.png?raw=true "Preview")
